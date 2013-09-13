@@ -559,10 +559,10 @@ def callConsensus():
     ## call gcon
     outDirs  = [ (outDir, k) for k in readAndReads.keys() ]
     if runner.args.nProcs == 1:
-	outFasta = filter(lambda z: z, map(gconFunc, outDirs))
+        outFasta = filter(lambda z: z, map(gconFunc, outDirs))
     else:
-    	pool = Pool(runner.args.nProcs)
-    	outFasta = filter(lambda z : z, pool.map(gconFunc, outDirs))
+        pool = Pool(runner.args.nProcs)
+        outFasta = filter(lambda z : z, pool.map(gconFunc, outDirs))
 
     ## write the results
     with FastaWriter('/'.join((outDir, "consensus.fa"))) as w:
