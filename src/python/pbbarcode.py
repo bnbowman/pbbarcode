@@ -104,10 +104,10 @@ def mpWrapper(f):
 def makeBarcodeFofnFromBasFofn():
     inputFofn = runner.args.inputFile
     inFiles = open(inputFofn).read().splitlines()
-    
+
     if not all(map(os.path.exists, inFiles)):
         raise IOError("All files in input.fofn must exist.")
-    
+
     logging.debug("Using %d processes." % runner.args.nProcs)
     if runner.args.nProcs <= 1:
         newFiles = map(mpWrapper, inFiles)
@@ -123,7 +123,7 @@ def makeBarcodeFofnFromBasFofn():
 def labelAlignments():
     logging.info("Labeling alignments using: %s" % runner.args.inputFofn)
     bcFofn = BarcodeH5Fofn(runner.args.inputFofn)
-    
+
     with CmpH5Reader(runner.args.cmpH5) as cmpH5:
         bcDS = n.zeros((len(cmpH5), 5), dtype = "int32")
 
@@ -137,7 +137,7 @@ def labelAlignments():
                     lZmw = None
             except KeyError:
                 lZmw = None
-            
+
             if lZmw:
                 bcDS[i,:] = n.array([lZmw.nScored, lZmw.bestIdx, lZmw.bestScore,
                                      lZmw.secondBestIdx, lZmw.secondBestScore])
