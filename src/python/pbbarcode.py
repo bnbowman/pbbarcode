@@ -294,7 +294,7 @@ def emitFastqs():
     fasta    = runner.args.fasta
 
     if runner.args.unlabeledZmws:
-        outFiles['UNLABLED'] = getUnlabeledZmws()
+        outFiles['UNLABELED'] = getUnlabeledZmws()
 
     if not os.path.exists(runner.args.outDir):
         os.makedirs(runner.args.outDir)
