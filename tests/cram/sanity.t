@@ -12,4 +12,5 @@
   $ pbbarcode.py emitFastqs --trim 20 bas.fofn barcode.fofn
   $ pbbarcode.py emitFastqs --subreads --trim 20 bas.fofn barcode.fofn
   $ cp $INH5 ./aligned_reads.cmp.h5         
+  $ chmod 766 ./aligned_reads.cmp.h5
   $ pbbarcode.py labelAlignments barcode.fofn aligned_reads.cmp.h5  
