@@ -51,8 +51,8 @@ from pbcore.io.BarcodeH5Reader import *
 from pbcore.io import FastaReader, FastqWriter, FastqRecord, \
     FastaWriter, FastaRecord
 
-from pbtools.pbbarcode.BarcodeLabeler import *
-from pbtools.pbbarcode._version import __version__
+from pbbarcode.BarcodeLabeler import *
+from pbbarcode._version import __version__
 
 from pbtools.pbh5tools.CmpH5Utils import copyAttributes
 

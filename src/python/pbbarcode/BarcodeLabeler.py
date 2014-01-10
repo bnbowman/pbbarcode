@@ -30,7 +30,7 @@ import logging
 
 from pbcore.io import BasH5Reader, BaxH5Reader
 from pbcore.io.FastaIO import *
-import pbtools.pbbarcode.SWaligner as Aligner
+import pbbarcode.SWaligner as Aligner
 import numpy as n
 
 from pbcore.io.BarcodeH5Reader import LabeledZmw, \

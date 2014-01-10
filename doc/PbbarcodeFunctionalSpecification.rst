@@ -80,7 +80,7 @@ Input and output
 
 labelZmws
 ---------
-  usage: pbbarcode.py labelZmws [-h] [--outDir OUTDIR] [--outFofn OUTFOFN]
+  usage: PBbarcode.py labelZmws [-h] [--outDir OUTDIR] [--outFofn OUTFOFN]
                                 [--adapterSidePad ADAPTERSIDEPAD]
                                 [--insertSidePad INSERTSIDEPAD]
                                 [--scoreMode {symmetric,paired}]
@@ -143,7 +143,7 @@ file.
 
 labelAlignments
 ---------------
-  usage: pbbarcode.py labelAlignments [-h]
+  usage: PBbarcode.py labelAlignments [-h]
                                       [--minAvgBarcodeScore MINAVGBARCODESCORE]
                                       [--minNumBarcodes MINNUMBARCODES]
                                       [--minScoreRatio MINSCORERATIO]
@@ -179,7 +179,7 @@ file additions.
 
 emitFastqs
 ----------
-  usage: pbbarcode.py emitFastqs [-h] [--outDir output.dir] [--subreads]
+  usage: PBbarcode.py emitFastqs [-h] [--outDir output.dir] [--subreads]
                                  [--unlabeledZmws] [--trim TRIM] [--fasta]
                                  [--minMaxInsertLength MINMAXINSERTLENGTH]
                                  [--hqStartTime HQSTARTTIME]
@@ -255,7 +255,7 @@ warning is issued.
 
 consensus
 ---------
-  usage: pbbarcode.py consensus [-h] [--subsample SUBSAMPLE] [--nZmws NZMWS]
+  usage: PBbarcode.py consensus [-h] [--subsample SUBSAMPLE] [--nZmws NZMWS]
                                 [--outDir OUTDIR] [--keepTmpDir]
                                 [--ccsFofn CCSFOFN] [--nProcs NPROCS]
                                 [--noQuiver]
@@ -368,7 +368,7 @@ Additionally, in some circumstances, it is useful to retain the entire
 history of the scoring, i.e., each barcode scored to each adapter
 across all ZMWs. In oder to retain this information, one must call:
 
-    ``pbbarcode.py labelZmws --saveExtendedInfo ...``
+    ``PBbarcode.py labelZmws --saveExtendedInfo ...``
 
 In this mode, the resultant HDF5 file will have an additional dataset
 under the BarcodeCalls group, named: ``all``. This dataset has the
