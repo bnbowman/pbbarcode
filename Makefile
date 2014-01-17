@@ -35,7 +35,7 @@ doc:
 	make -C doc html
 
 pip-install:
-	@which pip >& /dev/null
+	@which pip > /dev/null
 	@pip freeze|grep 'pbtools.barcode=='>/dev/null \
       && pip uninstall -y pbtools.barcode \
       || echo -n ''
