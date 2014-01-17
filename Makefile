@@ -34,15 +34,14 @@ doc-clean:
 doc:
 	make -C doc html
 
-pip-uninstall: $(shell which pip > /dev/null)
+pip-install:
+	@which pip >& /dev/null
 	@pip freeze|grep 'pbtools.barcode=='>/dev/null \
       && pip uninstall -y pbtools.barcode \
       || echo -n ''
 	@pip freeze|grep 'pbbarcode=='>/dev/null \
       && pip uninstall -y pbbarcode \
       || echo -n ''
-
-pip-install: $(shell which pip > /dev/null)
 	@pip install --no-index \
           --install-option="--install-scripts=$(PREFIX)/bin" \
           ./
