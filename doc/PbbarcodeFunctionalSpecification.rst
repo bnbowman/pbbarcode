@@ -80,7 +80,7 @@ Input and output
 
 labelZmws
 ---------
-  usage: PBbarcode.py labelZmws [-h] [--outDir OUTDIR] [--outFofn OUTFOFN]
+  usage: pbbarcode labelZmws [-h] [--outDir OUTDIR] [--outFofn OUTFOFN]
                                 [--adapterSidePad ADAPTERSIDEPAD]
                                 [--insertSidePad INSERTSIDEPAD]
                                 [--scoreMode {symmetric,paired}]
@@ -143,7 +143,7 @@ file.
 
 labelAlignments
 ---------------
-  usage: PBbarcode.py labelAlignments [-h]
+  usage: pbbarcode labelAlignments [-h]
                                       [--minAvgBarcodeScore MINAVGBARCODESCORE]
                                       [--minNumBarcodes MINNUMBARCODES]
                                       [--minScoreRatio MINSCORERATIO]
@@ -179,7 +179,7 @@ file additions.
 
 emitFastqs
 ----------
-  usage: PBbarcode.py emitFastqs [-h] [--outDir output.dir] [--subreads]
+  usage: pbbarcode emitFastqs [-h] [--outDir output.dir] [--subreads]
                                  [--unlabeledZmws] [--trim TRIM] [--fasta]
                                  [--minMaxInsertLength MINMAXINSERTLENGTH]
                                  [--hqStartTime HQSTARTTIME]
@@ -255,7 +255,7 @@ warning is issued.
 
 consensus
 ---------
-  usage: PBbarcode.py consensus [-h] [--subsample SUBSAMPLE] [--nZmws NZMWS]
+  usage: pbbarcode consensus [-h] [--subsample SUBSAMPLE] [--nZmws NZMWS]
                                 [--outDir OUTDIR] [--keepTmpDir]
                                 [--ccsFofn CCSFOFN] [--nProcs NPROCS]
                                 [--noQuiver]
@@ -368,7 +368,7 @@ Additionally, in some circumstances, it is useful to retain the entire
 history of the scoring, i.e., each barcode scored to each adapter
 across all ZMWs. In oder to retain this information, one must call:
 
-    ``PBbarcode.py labelZmws --saveExtendedInfo ...``
+    ``pbbarcode labelZmws --saveExtendedInfo ...``
 
 In this mode, the resultant HDF5 file will have an additional dataset
 under the BarcodeCalls group, named: ``all``. This dataset has the

@@ -738,7 +738,13 @@ class Pbbarcode(PBMultiToolRunner):
             callConsensus()
         else:
             sys.exit(1)
-          
-if __name__ == '__main__':    
-    runner = Pbbarcode()
+
+runner = Pbbarcode()
+
+def main():
+    """The entry point for pbbarcode"""
     sys.exit(runner.start())
+          
+#if __name__ == '__main__':    
+#    runner = Pbbarcode()
+#    sys.exit(runner.start())

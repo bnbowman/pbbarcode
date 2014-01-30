@@ -2,13 +2,13 @@ Overview of the pbbarcode package
 =================================
 
 The *pbbarcode* package provides tools for annotating PacBio
-sequencing reads with barcode information. Typically, *PBbarcode.py*
+sequencing reads with barcode information. Typically, *pbbarcode*
 is called in context of a SMRTPipe workflow as opposed to directly on
 the command line, however, users are encouraged to utilize the
 command-line utility directly, as more options are available.  
 
 The *pbbarcode* package provides a multi-command line tool
-*PBbarcode.py* which currently has the following sub-commands:  
+*pbbarcode* which currently has the following sub-commands:  
 
 * labelZmws
 * labelAlignments
