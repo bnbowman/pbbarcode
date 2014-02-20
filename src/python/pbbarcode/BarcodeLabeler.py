@@ -167,8 +167,8 @@ class BarcodeScorer(object):
                 ffscores = self.forwardScorer(adapter[1])
                 rrscores = self.reverseScorer(adapter[1])
 
-                scored = 2 if adapter[0] and adapter[1] else \
-                    1 if adapter[0] or adapter[1] else 0
+                scored = 2.0 if adapter[0] and adapter[1] else \
+                    1.0 if adapter[0] or adapter[1] else 0
                 
                 # An adapter score is the average barcode score for
                 # each barcode -- that way, you can compare across
@@ -207,7 +207,7 @@ class BarcodeScorer(object):
                     for j in xrange(0, len(scores)):
                         pths[j % 2] += scores[j][i]
                         pths[1 - j % 2] += scores[j][i + 1]
-                        results[i/2] = max(pths)
+                    results[i/2] = max(pths)
                         
                 p = n.argsort(-results)
                 s = results[p]
