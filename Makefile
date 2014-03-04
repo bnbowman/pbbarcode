@@ -38,10 +38,10 @@ pip-install:
 	@which pip > /dev/null
 	@pip freeze|grep 'pbtools.barcode=='>/dev/null \
       && pip uninstall -y pbtools.barcode \
-      || echo -n ''
+      || true
 	@pip freeze|grep 'pbbarcode=='>/dev/null \
       && pip uninstall -y pbbarcode \
-      || echo -n ''
+      || true
 	@pip install --no-index \
           --install-option="--install-scripts=$(PREFIX)/bin" \
           ./
