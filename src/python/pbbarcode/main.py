@@ -54,7 +54,7 @@ from pbcore.io import FastaReader, FastqWriter, FastqRecord, \
 from pbbarcode.BarcodeLabeler import *
 from pbbarcode._version import __version__
 
-from pbtools.pbh5tools.CmpH5Utils import copyAttributes
+from pbh5tools.CmpH5Utils import copyAttributes
 
 # Paths to the Barcode Datasets in the cmp.h5 file.
 BC_ALN_INFO_DS = "AlnInfo/Barcode"
