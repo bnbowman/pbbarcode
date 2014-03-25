@@ -1,6 +1,9 @@
 import logging
 import unittest
 
+# this is purely for the coverage to not fail when it's generated
+import pbbarcode
+
 log = logging.getLogger(__name__)
 
 
