@@ -3,27 +3,27 @@
 #
 # All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without 
+# Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# * Redistributions of source code must retain the above copyright notice, this 
+# * Redistributions of source code must retain the above copyright notice, this
 #   list of conditions and the following disclaimer.
-# * Redistributions in binary form must reproduce the above copyright notice, 
-#   this list of conditions and the following disclaimer in the documentation 
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
 #   and/or other materials provided with the distribution.
-# * Neither the name of Pacific Biosciences nor the names of its contributors 
-#   may be used to endorse or promote products derived from this software 
+# * Neither the name of Pacific Biosciences nor the names of its contributors
+#   may be used to endorse or promote products derived from this software
 #   without specific prior written permission.
-# 
-# THIS SOFTWARE IS PROVIDED BY PACIFIC BIOSCIENCES AND ITS CONTRIBUTORS 
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
-# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS 
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, 
+#
+# THIS SOFTWARE IS PROVIDED BY PACIFIC BIOSCIENCES AND ITS CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON 
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #################################################################################$$
 import logging
@@ -39,10 +39,11 @@ from pbcore.io.BarcodeH5Reader import LabeledZmw, \
 __RC_MAP__ = dict(zip('ACGTacgt-N','TGCAtgca-N'))
 
 class BarcodeScorer(object):
-    def __init__(self, basH5, barcodeFasta,  
-                 adapterSidePad = 0, insertSidePad = 4, 
-                 scoreMode = 'symmetric', maxHits = 10, 
-                 scoreFirst = False, startTimeCutoff = 1):
+    def __init__(self, basH5, barcodeFasta,
+                 adapterSidePad = 0, insertSidePad = 4,
+                 scoreMode = 'symmetric', maxHits = 10,
+                 scoreFirst = False, startTimeCutoff = 1,
+                 useOldWorkflow = False):
         """A BarcodeScorer object scores ZMWs and produces summaries
         of the scores. Various parameters control the behavior of the
         object, specifically the padding allows the user to add a
@@ -50,42 +51,48 @@ class BarcodeScorer(object):
         most relevant parameter is the scoreMode which dictates how
         the barcodes are scored, either paired or symmetric."""
 
-        self.basH5 = basH5
-        self.barcodeFasta = list(barcodeFasta)
-        self.aligner = Aligner.SWaligner()
-        self.barcodeLength = n.unique(map(lambda x : len(x.sequence), 
+        self.basH5           = basH5
+        self.barcodeFasta    = list(barcodeFasta)
+        self.aligner         = Aligner.SWaligner(useOldWorkflow)
+        self.barcodeLength   = n.unique(map(lambda x : len(x.sequence),
                                           self.barcodeFasta))
-        if len(self.barcodeLength) > 1:
-            raise Exception("Currently, all barcodes must be the same length.")
-        else:
-            self.barcodeLength = int(self.barcodeLength)
-
-        self.barcodeSeqs = [(barcode.sequence.upper(), 
-                             self._rc(barcode.sequence.upper())) 
-                            for barcode in self.barcodeFasta]
-
-        self.adapterSidePad = adapterSidePad
-        self.insertSidePad = insertSidePad
-        self.maxHits = maxHits
+        self.useOldWorkflow  = useOldWorkflow
+        self.adapterSidePad  = adapterSidePad
+        self.insertSidePad   = insertSidePad
+        self.maxHits         = maxHits
+        self.scoreFirst      = scoreFirst
+        self.startTimeCutoff = startTimeCutoff
 
         if scoreMode not in ['symmetric', 'paired']:
             raise Exception("scoreMode must either be symmetric or paired")
         self._scoreMode = scoreMode
 
-        self.scoreFirst = scoreFirst
-        self.startTimeCutoff = startTimeCutoff
+        if len(self.barcodeLength) > 1:
+            raise Exception("Currently, all barcodes must be the same length.")
+        else:
+            self.barcodeLength = int(self.barcodeLength)
 
+        # Original barcode sequences and scorers for the Old Workflow
+        self.barcodeSeqs = [(barcode.sequence.upper(),
+                             self._rc(barcode.sequence.upper()))
+                            for barcode in self.barcodeFasta]
         self.forwardScorer = self.aligner.makeScorer([x[0] for x in self.barcodeSeqs])
         self.reverseScorer = self.aligner.makeScorer([x[1] for x in self.barcodeSeqs])
-        
+
+        # Forward-oriented barcode sequence pairs for the New Workflow
+        self.orientedSeqs  = [bc.sequence.upper() if (i%2)==0 else
+                              self._rc(bc.sequence.upper())
+                              for i, bc in enumerate(self.barcodeFasta)]
+        self.pairedScorer  = self.aligner.makeScorer( self.orientedSeqs )
+
         logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
-                           "adapterSidePad: %d, insertSidePad: %d, and scoreFirst: %r") \
-                          % (scoreMode, adapterSidePad, insertSidePad, scoreFirst))
-    
+                "adapterSidePad: %d, insertSidePad: %d, scoreFirst: %r, and oldWorkflow: %s") \
+                % (scoreMode, adapterSidePad, insertSidePad, scoreFirst, useOldWorkflow))
+
     @property
     def movieName(self):
         return self.basH5.movieName
-    
+
     def makeBCLabel(self, s1, s2):
         return BARCODE_DELIMITER.join((s1, s2))
 
@@ -111,36 +118,61 @@ class BarcodeScorer(object):
 
     def _rc(self, s):
         return "".join([__RC_MAP__[c] for c in s[::-1]])
-    
+
     def _flankingSeqs(self, zmw):
-        def fromRange(rStart, rEnd):
+
+        # The old fromRange function reports ranges in their default orientation
+        def fromRangeOld(rStart, rEnd):
             try:
-                qSeqLeft = zmw.read(rStart - (self.barcodeLength + self.insertSidePad), 
+                qSeqLeft = zmw.read(rStart - (self.barcodeLength + self.insertSidePad),
                                     rStart + self.adapterSidePad).basecalls()
             except IndexError:
                 qSeqLeft = None
             try:
-                qSeqRight = zmw.read(rEnd - self.adapterSidePad, 
-                                     rEnd + self.barcodeLength + 
+                qSeqRight = zmw.read(rEnd - self.adapterSidePad,
+                                     rEnd + self.barcodeLength +
                                      self.insertSidePad).basecalls()
             except IndexError:
                 qSeqRight = None
 
             return (qSeqLeft, qSeqRight)
 
+        # The new fromRange function reports ranges oriented away from the Adapter
+        def fromRangeNew(rStart, rEnd):
+            try:
+                qSeqLeftRaw = zmw.read(rStart - (self.barcodeLength + self.insertSidePad),
+                                      rStart + self.adapterSidePad).basecalls()
+                qSeqLeft = self._rc( qSeqLeftRaw )
+            except IndexError:
+                qSeqLeft = None
+            try:
+                qSeqRight = zmw.read(rEnd - self.adapterSidePad,
+                                     rEnd + self.barcodeLength +
+                                     self.insertSidePad).basecalls()
+            except IndexError:
+                qSeqRight = None
+
+            return (qSeqLeft, qSeqRight)
+
+        # Chose which fromRange function we are using based on the selected Workflow
+        if self.useOldWorkflow:
+            fromRange = fromRangeOld
+        else:
+            fromRange = fromRangeNew
+
         adapterRegions = zmw.adapterRegions
         if len(adapterRegions) > self.maxHits:
             adapterRegions = adapterRegions[0:self.maxHits]
-        
+
         seqs = [fromRange(start, end) for (start, end) in adapterRegions]
 
         # We only score the first barcode if we don't find any adapters
-        # *and* the start time is less than the threshold. 
+        # *and* the start time is less than the threshold.
         scoredFirst = False
         if self.scoreFirst and not len(seqs):
             s = zmw.zmwMetric('HQRegionStartTime')
             e = zmw.zmwMetric('HQRegionEndTime')
-            # s<e => has HQ. 
+            # s<e => has HQ.
             if s < e and s <= self.startTimeCutoff:
                 l = self.barcodeLength + self.insertSidePad
                 l = l if zmw.hqRegion[1] > l else zmw.hqRegion[1]
@@ -151,12 +183,16 @@ class BarcodeScorer(object):
                         scoredFirst = True
                 except IndexError:
                     pass
-        
+
         return (seqs, scoredFirst)
 
     def labelZmws(self, holeNumbers):
         """Return a list of LabeledZmws for input holeNumbers"""
-        def scoreZmw(zmw):
+
+        def scoreZmwOld(zmw):
+            """
+            The old scoreZmw function tries all orientations of all sequences
+            """
             adapters, scoredFirst = self._flankingSeqs(zmw)
             adapterScores = [[]]*len(adapters)
             barcodeScores = n.zeros(len(self.barcodeSeqs))
@@ -167,30 +203,100 @@ class BarcodeScorer(object):
                 ffscores = self.forwardScorer(adapter[1])
                 rrscores = self.reverseScorer(adapter[1])
 
-                scored = 2.0 if adapter[0] and adapter[1] else \
-                    1.0 if adapter[0] or adapter[1] else 0
-                
+                scored = 2.0 if adapter[0] and adapter[1] \
+                    else 1.0 if adapter[0] or  adapter[1] \
+                    else 0
+
                 # An adapter score is the average barcode score for
                 # each barcode -- that way, you can compare across
                 # adapters even if the different adapters have
-                # different numbers of flanking sequence. 
+                # different numbers of flanking sequence.
                 if scored == 0:
                     adapterScores[i] = barcodeScores
                 else:
-                    adapterScores[i] = n.maximum((fscores + rrscores)/scored, 
+                    adapterScores[i] = n.maximum((fscores + rrscores)/scored,
                                                  (rscores + ffscores)/scored)
 
             barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
                 else n.zeros(len(self.barcodeSeqs))
 
-            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores,
-                    scoredFirst)
+            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
-        # o here is the record immediately above.
+        def scoreZmwNewPaired(zmw):
+            """
+            The new scoreZmw function for paired barcodes uses only the forward orientation
+                of the forward barcodes and the RC of the reverse barcodes
+            """
+            adapters, scoredFirst = self._flankingSeqs(zmw)
+            adapterScores = [[]]*len(adapters)
+            barcodeScores = n.zeros(len(self.barcodeSeqs))
+
+            for i,adapter in enumerate(adapters):
+                fscores = self.pairedScorer(adapter[0])
+                rscores = self.pairedScorer(adapter[1])
+
+                scored = 2.0 if adapter[0] and adapter[1] \
+                    else 1.0 if adapter[0] or  adapter[1] \
+                    else 0
+
+                # An adapter score is the average barcode score for
+                # each barcode -- that way, you can compare across
+                # adapters even if the different adapters have
+                # different numbers of flanking sequence.
+                if scored == 0:
+                    adapterScores[i] = barcodeScores
+                else:
+                    adapterScores[i] = (fscores + rscores)/scored
+
+            barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
+                else n.zeros(len(self.barcodeSeqs))
+
+            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
+
+        def scoreZmwNewSymmetric(zmw):
+            """
+            The new scoreZmw function for symmetric barcodes uses only the forward orientation
+                of the supplied barcodes
+            """
+            adapters, scoredFirst = self._flankingSeqs(zmw)
+            adapterScores = [[]]*len(adapters)
+            barcodeScores = n.zeros(len(self.barcodeSeqs))
+
+            for i,adapter in enumerate(adapters):
+                fscores = self.forwardScorer(adapter[0])
+                rscores = self.forwardScorer(adapter[1])
+
+                scored = 2.0 if adapter[0] and adapter[1] \
+                    else 1.0 if adapter[0] or  adapter[1] \
+                    else 0
+
+                # An adapter score is the average barcode score for
+                # each barcode -- that way, you can compare across
+                # adapters even if the different adapters have
+                # different numbers of flanking sequence.
+                if scored == 0:
+                    adapterScores[i] = barcodeScores
+                else:
+                    adapterScores[i] = (fscores + rscores)/scored
+
+            barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
+                else n.zeros(len(self.barcodeSeqs))
+
+            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
+
         def chooseSymmetric(o):
+            """
+            Convert a tuple "o" returned by scoreZmw into a LabeledZmw object
+                for a symmetrically barcoded ZMW
+            """
             p = n.argsort(-o[2])
             return LabeledZmw(o[0], o[1], p[0], o[2][p[0]], p[1], o[2][p[1]], o[3])
+
         def choosePaired(o):
+            """
+            Convert a tuple "o" returned by scoreZmw into a LabeledZmw object
+                for an asymmetrically barcoded ZMW
+            """
             if o[1] == 1:
                 s = n.array([max(o[2][i], o[2][i + 1]) for i in \
                                  xrange(0, len(self.barcodeSeqs), 2)])
@@ -208,12 +314,25 @@ class BarcodeScorer(object):
                         pths[j % 2] += scores[j][i]
                         pths[1 - j % 2] += scores[j][i + 1]
                     results[i/2] = max(pths)
-                        
+
                 p = n.argsort(-results)
                 s = results[p]
 
             return LabeledZmw(o[0], o[1], p[0], s[0], p[1], s[1], o[3])
-         
+
+        # Select the "scoreZmw" method to be used to generate raw barcode
+        #    scores
+        if self.useOldWorkflow:
+            scoreZmw = scoreZmwOld
+        elif self.scoreMode == 'symmetric':
+            scoreZmw = scoreZmwNewSymmetric
+        elif self.scoreMode == 'paired':
+            scoreZmw = scoreZmwNewPaired
+        else:
+            raise Exception("Unsupported scoring mode in BarcodeLabeler.py")
+
+        # Select the "choose" method to be used formatting raw barcode scores
+        #    into LabeledZmw Objects
         if self.scoreMode == 'symmetric':
             choose = chooseSymmetric
         elif self.scoreMode == 'paired':
@@ -221,5 +340,5 @@ class BarcodeScorer(object):
         else:
             raise Exception("Unsupported scoring mode in BarcodeLabeler.py")
 
-        scored = [scoreZmw(self.basH5[zmw]) for zmw in holeNumbers] 
+        scored = [scoreZmw(self.basH5[zmw]) for zmw in holeNumbers]
         return [choose(scoreTup) for scoreTup in scored if scoreTup[1]]

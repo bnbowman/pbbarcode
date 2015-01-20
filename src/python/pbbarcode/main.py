@@ -4,27 +4,27 @@
 #
 # All rights reserved.
 #
-# Redistribution and use in source and binary forms, with or without 
+# Redistribution and use in source and binary forms, with or without
 # modification, are permitted provided that the following conditions are met:
-# * Redistributions of source code must retain the above copyright notice, this 
+# * Redistributions of source code must retain the above copyright notice, this
 #   list of conditions and the following disclaimer.
-# * Redistributions in binary form must reproduce the above copyright notice, 
-#   this list of conditions and the following disclaimer in the documentation 
+# * Redistributions in binary form must reproduce the above copyright notice,
+#   this list of conditions and the following disclaimer in the documentation
 #   and/or other materials provided with the distribution.
-# * Neither the name of Pacific Biosciences nor the names of its contributors 
-#   may be used to endorse or promote products derived from this software 
+# * Neither the name of Pacific Biosciences nor the names of its contributors
+#   may be used to endorse or promote products derived from this software
 #   without specific prior written permission.
-# 
-# THIS SOFTWARE IS PROVIDED BY PACIFIC BIOSCIENCES AND ITS CONTRIBUTORS 
-# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED 
-# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR 
-# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS 
-# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, 
-# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, 
+#
+# THIS SOFTWARE IS PROVIDED BY PACIFIC BIOSCIENCES AND ITS CONTRIBUTORS
+# "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+# TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+# PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL PACIFIC BIOSCIENCES OR ITS
+# CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+# EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
 # PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON 
+# LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON
 # ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS 
+# (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #################################################################################$$
 import os
@@ -68,7 +68,7 @@ BARCODE_EXT   = '.bc.h5'
 BC_REGEX      = r'\.bc\.h5'
 
 def movieNameFromFile(fn):
-    return re.sub('|'.join((BC_REGEX, BAS_PLS_REGEX)) , '', 
+    return re.sub('|'.join((BC_REGEX, BAS_PLS_REGEX)) , '',
                   os.path.basename(fn))
 
 def makeBarcodeH5FromBasH5(basH5):
@@ -76,10 +76,11 @@ def makeBarcodeH5FromBasH5(basH5):
     base H5 file."""
     labeler = BarcodeScorer(basH5, FastaReader(runner.args.barcodeFile),
                             runner.args.adapterSidePad, runner.args.insertSidePad,
-                            scoreMode = runner.args.scoreMode, 
+                            scoreMode = runner.args.scoreMode,
                             maxHits = runner.args.maxAdapters,
-                            scoreFirst = runner.args.scoreFirst, 
-                            startTimeCutoff = runner.args.startTimeCutoff)
+                            scoreFirst = runner.args.scoreFirst,
+                            startTimeCutoff = runner.args.startTimeCutoff,
+                            useOldWorkflow = runner.args.old)
     if runner.args.nZmws < 0:
         zmws = basH5.sequencingZmws
     else:
@@ -88,13 +89,13 @@ def makeBarcodeH5FromBasH5(basH5):
     logging.debug("Labeling %d ZMWs from: %s" % (len(zmws), basH5.filename))
     labeledZmws = labeler.labelZmws(zmws)
     logging.debug("Labeled %d ZMWs" % len(labeledZmws))
-    
-    outBase = re.sub(BAS_PLS_REGEX, BARCODE_EXT, 
+
+    outBase = re.sub(BAS_PLS_REGEX, BARCODE_EXT,
                      os.path.basename(basH5.filename))
     outFile = '/'.join((runner.args.outDir, outBase))
     logging.debug("Writing to: %s" % outFile)
 
-    writeBarcodeH5(labeledZmws, labeler, outFile, 
+    writeBarcodeH5(labeledZmws, labeler, outFile,
                    runner.args.saveExtendedInfo)
     return outFile
 
@@ -144,8 +145,8 @@ def labelAlignments():
             else:
                 # either no barcode was found for this guy or they got
                 # filtered, hence the NULL_BARCODE
-                bcDS[i,:] = n.array([0, 
-                                     len(bcReader.barcodeLabels), 0, 
+                bcDS[i,:] = n.array([0,
+                                     len(bcReader.barcodeLabels), 0,
                                      len(bcReader.barcodeLabels), 0])
 
     # write to the cmp.h5 file.
@@ -157,14 +158,14 @@ def labelAlignments():
 
     # we use the first one to get the labels, if somehow they
     # don't have all of the same stuff that will be an issue.
-    bcLabels = n.concatenate((bcFofn.barcodeLabels, n.array([BARCODE_DELIMITER]))) 
-    H5.create_dataset(BC_INFO_ID, data = n.array(range(0, len(bcLabels))), 
+    bcLabels = n.concatenate((bcFofn.barcodeLabels, n.array([BARCODE_DELIMITER])))
+    H5.create_dataset(BC_INFO_ID, data = n.array(range(0, len(bcLabels))),
                       dtype = 'int32')
     H5.create_dataset(BC_INFO_NAME, data = bcLabels, dtype = h5.new_vlen(str))
     if BC_ALN_INFO_DS in H5:
         del H5[BC_ALN_INFO_DS]
     bcDS = H5.create_dataset(BC_ALN_INFO_DS, data = bcDS, dtype = 'int32')
-    bcDS.attrs['ColumnNames'] = n.array(['count', 'index1', 'score1', 'index2', 
+    bcDS.attrs['ColumnNames'] = n.array(['count', 'index1', 'score1', 'index2',
                                          'score2'])
     #force BarcodeMode to have numpy dtype for CmpH5Sort 'extra datasets' routine
     bcDS.attrs['BarcodeMode'] = n.array( bcFofn.scoreMode )
@@ -175,7 +176,7 @@ def zipFofns(*inFofns):
     where n is the number of entries in each FOFN."""
     def readAndSort(inFile):
         lines = n.array(open(inFile).read().splitlines())
-        lines = lines[n.array(n.argsort([movieNameFromFile(fofnLine) for 
+        lines = lines[n.array(n.argsort([movieNameFromFile(fofnLine) for
                                          fofnLine in lines]))]
         return lines
 
@@ -185,10 +186,10 @@ def zipFofns(*inFofns):
         raise Exception("Fofns don't match, unequal number of inputs.")
     else:
         for i in xrange(0, n.unique(l)):
-            if len(n.unique([movieNameFromFile(sortedFofn[i]) for 
+            if len(n.unique([movieNameFromFile(sortedFofn[i]) for
                              sortedFofn in sortedFofns])) != 1:
                 raise Exception("Fofn elements don't match, movies differ.")
-    
+
     # need to un-arrayify these guys
     return zip(*map(list, sortedFofns))
 
@@ -203,7 +204,7 @@ def filterZmws(zmwsForBCs):
             return zmw.zmwMetric('HQRegionStartTime')
         except:
             return 0
-        
+
     def getReadScore(zmw):
         return zmw.zmwMetric("ReadScore")
 
@@ -257,31 +258,31 @@ def getFastqRecords(zmw, lZmw = None):
             reads = [zmw.ccsRead]
     elif zmw.baxH5.hasRawBasecalls:
         if runner.args.subreads:
-            warnOnce("`subreads` argument is ignored when using >= 2.1" + 
+            warnOnce("`subreads` argument is ignored when using >= 2.1" +
                      "bas.h5 data as input.")
         reads = zmw.subreads
     else:
         if runner.args.subreads:
-            warnOnce("`subreads` argument is ignored when using >= 2.1" + 
+            warnOnce("`subreads` argument is ignored when using >= 2.1" +
                      "ccs.h5 data as input.")
         reads = [zmw.ccsRead]
 
-    extra = (" %g %g" % (round(zmw.zmwMetric("ReadScore"), 2), 
+    extra = (" %g %g" % (round(zmw.zmwMetric("ReadScore"), 2),
                          round(lZmw.averageScore, 2))) if lZmw else ""
-    
+
     return [FastqRecord(read.readName + extra,
                         read.basecalls(),
                         read.QualityValue()) for read in reads if read]
 
 def getFastqs():
     zmwsByBarcode = getZmwsForBarcodes()
-    logging.debug("Pre-filter: Average number of ZMWs per barcode: %d" % 
+    logging.debug("Pre-filter: Average number of ZMWs per barcode: %d" %
                   n.mean([len(zmwsByBarcode[k]) for k in zmwsByBarcode.keys()]))
 
-    zmwsByBarcode = filterZmws(zmwsByBarcode) 
-    logging.debug("Post-filter: Average number of ZMWs per barcode: %d" % 
+    zmwsByBarcode = filterZmws(zmwsByBarcode)
+    logging.debug("Post-filter: Average number of ZMWs per barcode: %d" %
                   n.mean([len(zmwsByBarcode[k]) for k in zmwsByBarcode.keys()]))
-    
+
     def getReadData(zmws):
         recs = [getFastqRecords(zmw,lZmw) for zmw,lZmw in zmws]
         recs = filter(lambda x : x, recs)
@@ -307,7 +308,7 @@ def emitFastqs():
     else:
         writer = FastqWriter
         record = FastqRecord
-    
+
     l = 'a' if runner.args.fasta else 'q'
     for k in outFiles.keys():
         if outFiles[k]:
@@ -323,23 +324,23 @@ def getUnlabeledZmws():
     """Return FASTQ records for ZMWs which do not have a barcode label"""
     unlabeledZmws = []
 
-    for basFile, barcodeFile in zipFofns(runner.args.inputFofn, 
+    for basFile, barcodeFile in zipFofns(runner.args.inputFofn,
                                          runner.args.barcodeFofn):
         basH5 = BasH5Reader(basFile)
         bcH5  = BarcodeH5Reader(barcodeFile)
-        sdiff = basH5.sequencingZmws[~n.in1d(basH5.sequencingZmws,  
+        sdiff = basH5.sequencingZmws[~n.in1d(basH5.sequencingZmws,
                                              bcH5.labeledZmws.keys())]
         for hn in sdiff:
             unlabeledZmws.append(basH5[hn])
 
-    return reduce(lambda x,y : x+y, [getFastqRecords(unlabeledZmw) for 
+    return reduce(lambda x,y : x+y, [getFastqRecords(unlabeledZmw) for
                                      unlabeledZmw in unlabeledZmws])
 
 def getZmwsForBarcodes(labels = None):
     """dictionary of pbcore.io.Zmw and LabeledZmw indexed by barcode
     label"""
-    zmwsForBCs = {} 
-    for basFile, barcodeFile in zipFofns(runner.args.inputFofn, 
+    zmwsForBCs = {}
+    for basFile, barcodeFile in zipFofns(runner.args.inputFofn,
                                          runner.args.barcodeFofn):
         basH5   = BasH5Reader(basFile)
         bcH5    = BarcodeH5Reader(barcodeFile)
@@ -371,7 +372,7 @@ def gconFunc(tp):
 
     ## check to see if the file is empty
     r = FastaReader("%s/g_consensus.fa" % bcdir)
-    
+
     if not list(r)[0].sequence:
         return None
 
@@ -384,18 +385,18 @@ def gconFunc(tp):
                    '%s/aligned_reads.sam') % (runner.args.inputFofn, bcdir, bcdir, bcdir)
         logging.debug(cmd)
         subprocess.call(cmd, shell = True)
-            
+
         cmd = 'samtoh5 %s/aligned_reads.sam %s/g_consensus.fa %s/aligned_reads.cmp.h5' % \
             (bcdir, bcdir, bcdir)
         logging.debug(cmd)
         subprocess.call(cmd, shell = True)
-    
+
         cmd = ('loadPulses %s %s/aligned_reads.cmp.h5 -byread -metrics ' + \
                    'QualityValue,InsertionQV,MergeQV,DeletionQV,DeletionTag,SubstitutionTag,' + \
                    'SubstitutionQV') % (runner.args.inputFofn, bcdir)
         logging.debug(cmd)
         subprocess.call(cmd, shell = True)
-    
+
         cmd = 'cmph5tools.py sort --inPlace %s/aligned_reads.cmp.h5' % bcdir
         logging.debug(cmd)
         subprocess.call(cmd, shell = True)
@@ -408,7 +409,7 @@ def gconFunc(tp):
         cFilename = 'q_consensus.fasta'
     else:
         cFilename = 'g_consensus.fa'
-        
+
     ## append results to output file.
     bcCons = "%s/%s/%s" % (rootDir, barcode, cFilename)
     if os.path.exists(bcCons):
@@ -419,7 +420,7 @@ def gconFunc(tp):
 def subsampleReads(e):
     logging.debug("starting with %d zmws" % len(e))
     if runner.args.nZmws > 0:
-        k = runner.args.nZmws if runner.args.nZmws < len(e) else len(e)    
+        k = runner.args.nZmws if runner.args.nZmws < len(e) else len(e)
     elif runner.args.subsample < 1:
         k = int(len(e)*runner.args.subsample)
     else:
@@ -436,12 +437,12 @@ def callConsensus():
         if not srData and not ccsData:
             return (None,None)
 
-        def getSeedRead(reads, lq = 80, uq = 90, 
+        def getSeedRead(reads, lq = 80, uq = 90,
                         sLambda = lambda x : -x.zmw.readScore):
             lens = map(len, reads)
-            candidateRange = (n.percentile(lens, lq), 
+            candidateRange = (n.percentile(lens, lq),
                               n.percentile(lens, uq))
-            pfReads = [read for read,l in zip(reads, lens) if 
+            pfReads = [read for read,l in zip(reads, lens) if
                        l >= candidateRange[0] and l <= candidateRange[1]]
             pfReads.sort(key = sLambda)
             return pfReads[0] if len(pfReads) else None
@@ -459,9 +460,9 @@ def callConsensus():
         else:
             logging.info("Using a raw read for the seed read")
             seedRead = getSeedRead(srData)
-        
+
         return (seedRead, srData)
-    
+
     # check to make sure that you have the necessary dependencies,
     # i.e., hgap script, blasr, etc.
     try:
@@ -474,17 +475,17 @@ def callConsensus():
         zmwsForBCs = getZmwsForBarcodes(runner.args.barcode)
     else:
         zmwsForBCs = getZmwsForBarcodes()
-    
+
     # subsample
     zmwsForBCs = {k:subsampleReads(v) for k,v in zmwsForBCs.items()}
 
-    logging.info("unfiltered average zmws per barcode: %g" % 
+    logging.info("unfiltered average zmws per barcode: %g" %
                  n.round(n.mean(map(len, zmwsForBCs.values()))))
 
     # filter ZMWs
     zmwsForBCs = filterZmws(zmwsForBCs)
-    
-    logging.info("filtered average zmws per barcode: %g" % 
+
+    logging.info("filtered average zmws per barcode: %g" %
                  n.round(n.mean(map(len, zmwsForBCs.values()))))
 
     # now choose the best subread to seed the assembly
@@ -492,9 +493,9 @@ def callConsensus():
         # XXX: This part depends on the filenames of the ccs and input
         # fofns, this is essentially a workaround to the fact the the
         # part isn't part of the API
-        ccsReaders = {movieNameFromFile(l):BasH5Reader(l) for l in 
+        ccsReaders = {movieNameFromFile(l):BasH5Reader(l) for l in
                       open(runner.args.ccsFofn).read().splitlines()}
-        
+
         # fill in the CCS spot.
         for k,v in zmwsForBCs.items():
             l = []
@@ -504,14 +505,14 @@ def callConsensus():
             zmwsForBCs[k] = l
     else:
         # add none to the CCS spot.
-        zmwsForBCs = {k:[(zmw,lZmw,None) for zmw,lZmw in v] 
+        zmwsForBCs = {k:[(zmw,lZmw,None) for zmw,lZmw in v]
                       for k,v in zmwsForBCs.iteritems()}
 
     readAndReads = { k:makeReadAndReads(v) for k,v in zmwsForBCs.items() }
 
     # remove barcodes that don't have a seed read and a set of useable reads.
     readAndReads = { k:v for k,v in readAndReads.items() if v[0] and v[1] }
-   
+
     # generate FASTA files
     outDir = runner.args.outDir
 
@@ -525,7 +526,7 @@ def callConsensus():
             w.writeRecord(FastaRecord(reads[0].readName, reads[0].basecalls()))
 
         subreads = reads[1]
-        
+
         # emit the subreads to a single file
         with FastaWriter("%s/subreads.fasta" % bcdir) as w:
             for r in subreads:
@@ -537,26 +538,26 @@ def callConsensus():
         for inFof, in zipFofns(runner.args.inputFofn):
             bh5 = BaxH5Reader(inFof)
             reg = bh5.file['/PulseData/Regions']
-            inMovie = filter(lambda z : z.baxH5.movieName == bh5.movieName, 
+            inMovie = filter(lambda z : z.baxH5.movieName == bh5.movieName,
                              subreads)
             holes = n.in1d(reg[:,0], n.array([a.holeNumber for a in inMovie]))
-            if any(holes): 
+            if any(holes):
                 nreg = reg[holes,:]
             else:
                 nreg = n.empty(shape = (0, reg.shape[1]), dtype = 'int32')
 
             fname = "%s/%s.rgn.h5" % (bcdir, movieNameFromFile(inFof))
             nfile = h5.File(fname, 'w')
-            ndset = nfile.create_dataset('/PulseData/Regions', data = nreg, 
+            ndset = nfile.create_dataset('/PulseData/Regions', data = nreg,
                                          maxshape = (None, None))
             copyAttributes(reg, ndset)
             nfile.close()
             nfofn.append(fname)
-        
+
         ofile = open('%s/region.fofn' % bcdir, 'w')
         ofile.writelines("\n".join(nfofn))
         ofile.close()
-    
+
     ## call gcon
     outDirs  = [ (outDir, k) for k in readAndReads.keys() ]
     if runner.args.nProcs == 1:
@@ -575,56 +576,58 @@ def callConsensus():
         for barcode, reads in readAndReads.items():
              bcdir = '/'.join((outDir, barcode))
              shutil.rmtree(bcdir)
-        
+
 
 class Pbbarcode(PBMultiToolRunner):
     def __init__(self):
         desc = ['Utilities for labeling and annoting reads with barcode information.']
         super(Pbbarcode, self).__init__('\n'.join(desc))
         subparsers = self.subParsers
-                
+
         desc = ['Creates a barcode.h5 file from base h5 files.']
-        parser_m = subparsers.add_parser('labelZmws', description = "\n".join(desc), 
+        parser_m = subparsers.add_parser('labelZmws', description = "\n".join(desc),
                                          help = 'Label zmws with barcode annotation',
                                          formatter_class = \
                                              argparse.ArgumentDefaultsHelpFormatter)
-        parser_m.add_argument('--outDir', 
+        parser_m.add_argument('--outDir',
                               help = 'Where to write the newly created barcode.h5 files.',
                               default = os.getcwd())
         parser_m.add_argument('--outFofn', help = 'Write to outFofn',
                               default = 'barcode.fofn')
         parser_m.add_argument('--adapterSidePad', help = 'Pad with adapterSidePad bases',
-                              default = 4, type = int)
+                              default = 0, type = int)
         parser_m.add_argument('--insertSidePad', help = 'Pad with insertSidePad bases',
-                              default = 4, type = int)
-        parser_m.add_argument('--scoreMode', 
+                              default = 25, type = int)
+        parser_m.add_argument('--scoreMode',
                               help = 'The mode in which the barcodes should be scored.',
                               choices = SCORE_MODES, default = 'symmetric', type = str)
-        parser_m.add_argument('--maxAdapters', type = int, default = 20, 
+        parser_m.add_argument('--maxAdapters', type = int, default = 20,
                               help = 'Only score the first maxAdapters')
         parser_m.add_argument('--scoreFirst', action = 'store_true', default = False,
                               help = 'Whether to try to score the leftmost barcode in a trace.')
-        parser_m.add_argument('--startTimeCutoff', 
+        parser_m.add_argument('--startTimeCutoff',
                               help = 'Reads must start before this value in order to be ' + \
-                                  'included when scoreFirst is set.', type = float, 
+                                  'included when scoreFirst is set.', type = float,
                               default = 10.0)
-        parser_m.add_argument('--nZmws', type = int, default = -1, 
+        parser_m.add_argument('--nZmws', type = int, default = -1,
                               help = 'Use the first n ZMWs for testing')
-        parser_m.add_argument('--nProcs', type = int, default = 8, 
+        parser_m.add_argument('--nProcs', type = int, default = 8,
                               help = 'How many processes to use')
+        parser_m.add_argument('--old', action='store_true',
+                              help = 'Revert to using the old Smith-Waterman binary')
         parser_m.add_argument('--saveExtendedInfo', action = 'store_true', default = False,\
                                   help = 'Whether to save extended information to' + \
                                   'the barcode.h5 files; this information is useful for ' + \
                                   'debugging and chimera detection')
-        parser_m.add_argument('barcodeFile', metavar = 'barcode.fasta', 
+        parser_m.add_argument('barcodeFile', metavar = 'barcode.fasta',
                               help = 'Input barcode fasta file')
         parser_m.add_argument('inputFile', metavar = 'input.fofn',
                               help = 'Input base fofn')
 
         def addFilteringOpts(parser, justBarcode = False):
             ## These are independent of the barcode scoring
-            if not justBarcode: 
-                parser.add_argument('--minMaxInsertLength', default = 0, type = int, 
+            if not justBarcode:
+                parser.add_argument('--minMaxInsertLength', default = 0, type = int,
                                     help = "ZMW Filter: exclude ZMW if the longest subread" + \
                                         "is less than this amount")
                 parser.add_argument('--hqStartTime', default = float("inf"), type = float,
@@ -633,7 +636,7 @@ class Pbbarcode(PBMultiToolRunner):
                 parser.add_argument('--minReadScore', default = 0, type = float,
                                     help = "ZMW Filter: exclude ZMW if readScore is less than" + \
                                         "this value")
-     
+
             ## These obviously need the barcode score
             parser.add_argument('--minAvgBarcodeScore', default = 0.0, type = float,
                                 help = "ZMW Filter: exclude ZMW if average barcode score " + \
@@ -649,7 +652,7 @@ class Pbbarcode(PBMultiToolRunner):
             # parser.add_argument('--filterChimeras', default = False, action = 'store_true',
             #                     help = "ZMW Filter: exclude ZMWs that appear to be chimeric")
 
-        
+
         desc = ['Adds information about barcode alignments to a cmp.h5 file',
                 'from a previous call to "labelZmws".']
         parser_s = subparsers.add_parser('labelAlignments', description = "\n".join(desc),
@@ -660,24 +663,24 @@ class Pbbarcode(PBMultiToolRunner):
                               help = 'input barcode fofn file')
         parser_s.add_argument('cmpH5', metavar = 'aligned_reads.cmp.h5',
                               help = 'cmp.h5 file to add barcode labels')
-       
+
         desc = ['Takes a bas.h5 fofn and a barcode.h5 fofn and produces',
                 'a fast[a|q] file for each barcode.']
         parser_s = subparsers.add_parser('emitFastqs', description = "\n".join(desc),
-                                         help = "Write fastq files", 
+                                         help = "Write fastq files",
                                          formatter_class=argparse.ArgumentDefaultsHelpFormatter)
         parser_s.add_argument('--outDir', metavar = 'output.dir',
                               help = 'output directory to write fastq files',
                               default = os.getcwd())
 
-        parser_s.add_argument('--subreads', 
+        parser_s.add_argument('--subreads',
                               help = 'whether to produce fastq files for the subreads;' + \
                                   'the default is to use the CCS reads. This option only' + \
                                   'applies when input.fofn has both consensus and raw reads,' + \
                                   'otherwise the read type from input.fofn will be returned.',
                               action = 'store_true',
                               default = False)
-        parser_s.add_argument('--unlabeledZmws', 
+        parser_s.add_argument('--unlabeledZmws',
                               help = 'whether to emit a fastq file for the unlabeled ZMWs.' + \
                               ' These are the ZMWs where no adapters are found typically',
                               action = 'store_true',
@@ -714,7 +717,7 @@ class Pbbarcode(PBMultiToolRunner):
         parser_s.add_argument('--noQuiver', action = 'store_true',
                               default = False)
         addFilteringOpts(parser_s)
-        
+
         parser_s.add_argument('inputFofn', metavar = 'input.fofn',
                               help = 'input bas.h5 fofn file')
         parser_s.add_argument('barcodeFofn', metavar = 'barcode.fofn',
@@ -728,7 +731,7 @@ class Pbbarcode(PBMultiToolRunner):
 
     def run(self):
         logging.debug("Arguments" + str(self.args))
-        
+
         if self.args.subCommand == 'labelZmws':
             makeBarcodeFofnFromBasFofn()
         elif self.args.subCommand == 'labelAlignments':
@@ -745,7 +748,3 @@ runner = Pbbarcode()
 def main():
     """The entry point for pbbarcode"""
     sys.exit(runner.start())
-          
-#if __name__ == '__main__':    
-#    runner = Pbbarcode()
-#    sys.exit(runner.start())

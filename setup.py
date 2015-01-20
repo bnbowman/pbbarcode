@@ -14,16 +14,17 @@ if os.path.exists(vFile):
             break
 else:
     _ReadVersion = '0.0.0'
-    
+
 setup(
     name = 'pbbarcode',
     version=_ReadVersion,
     author='pbiDevNet',
     author_email='pbiDevNet@pacificbiosciences.com',
     license='LICENSE.txt',
-    packages = find_packages('src/python'),  
+    packages = find_packages('src/python'),
     package_dir = {'':'src/python'},
-    ext_modules=[Extension('pbbarcode/sw', ['src/C/sw.c'], extra_compile_args=["-O3","-shared"])], 
+    ext_modules=[Extension('pbbarcode/sw', ['src/C/sw.c'], extra_compile_args=["-O3","-shared"]),
+                 Extension('pbbarcode/sw_new', ['src/C/sw_new.c'], extra_compile_args=["-O3","-shared"])],
     zip_safe = False,
     entry_points={
         'console_scripts': [
