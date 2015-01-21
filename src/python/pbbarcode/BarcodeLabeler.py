@@ -26,15 +26,14 @@
 # (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
 # SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #################################################################################$$
-import logging
 
+import logging
 import numpy as np
+
 from pbcore.io import BasH5Reader, BaxH5Reader
-#from pbcore.io.FastaIO import *
+from pbcore.io.BarcodeH5Reader import LabeledZmw
 from pbbarcode.SWaligner import SWaligner
 from pbbarcode.utils import makeBarcodeLabel, Bunch, reverseComplement
-
-from pbcore.io.BarcodeH5Reader import LabeledZmw, BARCODE_DELIMITER
 
 class BarcodeScorer(object):
     def __init__(self, basH5, barcodeFasta,
@@ -54,6 +53,7 @@ class BarcodeScorer(object):
 
         self.basH5           = basH5
         self.barcodeFasta    = list(barcodeFasta)
+        self.barcodeNames    = np.array([x.name for x in self.barcodeFasta])
         self.aligner         = SWaligner(useOldWorkflow)
         self.barcodeLength   = np.unique(map(lambda x : len(x.sequence),
                                           self.barcodeFasta))
@@ -66,7 +66,7 @@ class BarcodeScorer(object):
 
         if scoreMode not in ['symmetric', 'paired']:
             raise Exception("scoreMode must either be symmetric or paired")
-        self._scoreMode = scoreMode
+        self.scoreMode = scoreMode
 
         if len(self.barcodeLength) > 1:
             raise Exception("Currently, all barcodes must be the same length.")
@@ -90,29 +90,18 @@ class BarcodeScorer(object):
                 "adapterSidePad: %d, insertSidePad: %d, scoreFirst: %r, and oldWorkflow: %s") \
                 % (scoreMode, adapterSidePad, insertSidePad, scoreFirst, useOldWorkflow))
 
+        if self.scoreMode == 'paired':
+            self.barcodeLabels = np.array([makeBarcodeLabel(self.barcodeFasta[i].name,
+                                           self.barcodeFasta[i+1].name)
+                                           for i in xrange(0, len(self.barcodeSeqs), 2)])
+        else:
+            self.barcodeLabels = np.array([makeBarcodeLabel(x.name, x.name)
+                                           for x in self.barcodeFasta])
+
+
     @property
     def movieName(self):
         return self.basH5.movieName
-
-    @property
-    def barcodeLabels(self):
-        """The barcode labels are function of the barcodeNames and the
-        scoreMode, they represent the user-visible names."""
-        if self.scoreMode == 'paired':
-            return np.array([makeBarcodeLabel(self.barcodeFasta[i].name,
-                                              self.barcodeFasta[i+1].name) for i
-                            in xrange(0, len(self.barcodeSeqs), 2)])
-        else:
-            return np.array([makeBarcodeLabel(x.name, x.name) for x in self.barcodeFasta])
-
-    @property
-    def barcodeNames(self):
-        """The barcode names are the FASTA names"""
-        return np.array([x.name for x in self.barcodeFasta])
-
-    @property
-    def scoreMode(self):
-        return self._scoreMode
 
     def _flankingSeqs(self, zmw):
 
