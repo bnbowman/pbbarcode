@@ -35,7 +35,52 @@ from pbcore.io.BarcodeH5Reader import LabeledZmw
 from pbbarcode.SWaligner import SWaligner
 from pbbarcode.utils import makeBarcodeLabel, Bunch, reverseComplement
 
+def makeFromRangeFunc(barcodeLength, insertSidePad, adapterSidePad, useOldWorkflow):
+    """In order to score an Adapter for possible barcodes, we need a function that
+    returns the ranges of sequence immediately to the 5' and 3' end of a given
+    adapter, which differ slightly between workflows."""
+
+    if useOldWorkflow:
+        # The old fromRange function reports ranges in their default orientation
+        def fromRangeFunc(zmw, rStart, rEnd):
+            try:
+                qSeqLeft = zmw.read(rStart - (barcodeLength + insertSidePad),
+                                    rStart + adapterSidePad).basecalls()
+            except IndexError:
+                qSeqLeft = None
+            try:
+                qSeqRight = zmw.read(rEnd - adapterSidePad,
+                                     rEnd + barcodeLength + insertSidePad).basecalls()
+            except IndexError:
+                qSeqRight = None
+            return (qSeqLeft, qSeqRight)
+    else:
+        # The new fromRange function reports ranges oriented away from the Adapter
+        def fromRangeFunc(zmw, rStart, rEnd):
+            try:
+                qSeqLeftRaw = zmw.read(rStart - (barcodeLength + insertSidePad),
+                                       rStart + adapterSidePad).basecalls()
+                qSeqLeft = reverseComplement( qSeqLeftRaw )
+            except IndexError:
+                qSeqLeft = None
+            try:
+                qSeqRight = zmw.read(rEnd - adapterSidePad,
+                                     rEnd + barcodeLength + insertSidePad).basecalls()
+            except IndexError:
+                qSeqRight = None
+            return (qSeqLeft, qSeqRight)
+
+    # Return the selected fromRange function
+    return fromRangeFunc
+
+
 class BarcodeScorer(object):
+    """A BarcodeScorer object scores ZMWs and produces summaries
+    of the scores. Various parameters control the behavior of the
+    object, specifically the padding allows the user to add a
+    little extra on each side of the adapter find for safety. The
+    most relevant parameter is the scoreMode which dictates how
+    the barcodes are scored, either paired or symmetric."""
     def __init__(self, basH5, barcodeFasta,
                  adapterSidePad = 0,
                  insertSidePad = 4,
@@ -44,12 +89,6 @@ class BarcodeScorer(object):
                  scoreFirst = False,
                  startTimeCutoff = 1,
                  useOldWorkflow = False):
-        """A BarcodeScorer object scores ZMWs and produces summaries
-        of the scores. Various parameters control the behavior of the
-        object, specifically the padding allows the user to add a
-        little extra on each side of the adapter find for safety. The
-        most relevant parameter is the scoreMode which dictates how
-        the barcodes are scored, either paired or symmetric."""
 
         self.basH5           = basH5
         self.barcodeFasta    = list(barcodeFasta)
@@ -86,10 +125,7 @@ class BarcodeScorer(object):
                               for i, bc in enumerate(self.barcodeFasta)]
         self.pairedScorer  = self.aligner.makeScorer( self.orientedSeqs )
 
-        logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
-                "adapterSidePad: %d, insertSidePad: %d, scoreFirst: %r, and oldWorkflow: %s") \
-                % (scoreMode, adapterSidePad, insertSidePad, scoreFirst, useOldWorkflow))
-
+        # Given the scoreMode, create all of the possible barcode labels
         if self.scoreMode == 'paired':
             self.barcodeLabels = np.array([makeBarcodeLabel(self.barcodeFasta[i].name,
                                            self.barcodeFasta[i+1].name)
@@ -98,57 +134,31 @@ class BarcodeScorer(object):
             self.barcodeLabels = np.array([makeBarcodeLabel(x.name, x.name)
                                            for x in self.barcodeFasta])
 
+        # Make a "fromRange" function for finding adapter-flanking regions
+        self.fromRange = makeFromRangeFunc(self.barcodeLength,
+                                           self.insertSidePad,
+                                           self.adapterSidePad,
+                                           self.useOldWorkflow)
+
+        # If initialization made it this far, log the settings used
+        logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
+                "adapterSidePad: %d, insertSidePad: %d, scoreFirst: %r, and oldWorkflow: %s") \
+                % (scoreMode, adapterSidePad, insertSidePad, scoreFirst, useOldWorkflow))
 
     @property
     def movieName(self):
         return self.basH5.movieName
 
     def _flankingSeqs(self, zmw):
-
-        # The old fromRange function reports ranges in their default orientation
-        def fromRangeOld(rStart, rEnd):
-            try:
-                qSeqLeft = zmw.read(rStart - (self.barcodeLength + self.insertSidePad),
-                                    rStart + self.adapterSidePad).basecalls()
-            except IndexError:
-                qSeqLeft = None
-            try:
-                qSeqRight = zmw.read(rEnd - self.adapterSidePad,
-                                     rEnd + self.barcodeLength +
-                                     self.insertSidePad).basecalls()
-            except IndexError:
-                qSeqRight = None
-
-            return (qSeqLeft, qSeqRight)
-
-        # The new fromRange function reports ranges oriented away from the Adapter
-        def fromRangeNew(rStart, rEnd):
-            try:
-                qSeqLeftRaw = zmw.read(rStart - (self.barcodeLength + self.insertSidePad),
-                                      rStart + self.adapterSidePad).basecalls()
-                qSeqLeft = reverseComplement( qSeqLeftRaw )
-            except IndexError:
-                qSeqLeft = None
-            try:
-                qSeqRight = zmw.read(rEnd - self.adapterSidePad,
-                                     rEnd + self.barcodeLength +
-                                     self.insertSidePad).basecalls()
-            except IndexError:
-                qSeqRight = None
-
-            return (qSeqLeft, qSeqRight)
-
-        # Chose which fromRange function we are using based on the selected Workflow
-        if self.useOldWorkflow:
-            fromRange = fromRangeOld
-        else:
-            fromRange = fromRangeNew
-
+        """Extract the flanking sequences for the first 'maxHits' adapters from a
+        ZMW.  If that number is 0 and scoreFirst is true, try to extract a barcode
+        from the 5' tip of the read instead.
+        """
         adapterRegions = zmw.adapterRegions
         if len(adapterRegions) > self.maxHits:
             adapterRegions = adapterRegions[0:self.maxHits]
 
-        seqs = [fromRange(start, end) for (start, end) in adapterRegions]
+        seqs = [self.fromRange(zmw, start, end) for (start, end) in adapterRegions]
 
         # We only score the first barcode if we don't find any adapters
         # *and* the start time is less than the threshold.
