@@ -28,21 +28,22 @@
 #################################################################################$$
 import logging
 
+import numpy as np
 from pbcore.io import BasH5Reader, BaxH5Reader
-from pbcore.io.FastaIO import *
-import pbbarcode.SWaligner as Aligner
-import numpy as n
+#from pbcore.io.FastaIO import *
+from pbbarcode.SWaligner import SWaligner
+from pbbarcode.utils import makeBarcodeLabel, Bunch, reverseComplement
 
-from pbcore.io.BarcodeH5Reader import LabeledZmw, \
-    BARCODE_DELIMITER
-
-__RC_MAP__ = dict(zip('ACGTacgt-N','TGCAtgca-N'))
+from pbcore.io.BarcodeH5Reader import LabeledZmw, BARCODE_DELIMITER
 
 class BarcodeScorer(object):
     def __init__(self, basH5, barcodeFasta,
-                 adapterSidePad = 0, insertSidePad = 4,
-                 scoreMode = 'symmetric', maxHits = 10,
-                 scoreFirst = False, startTimeCutoff = 1,
+                 adapterSidePad = 0,
+                 insertSidePad = 4,
+                 scoreMode = 'symmetric',
+                 maxHits = 10,
+                 scoreFirst = False,
+                 startTimeCutoff = 1,
                  useOldWorkflow = False):
         """A BarcodeScorer object scores ZMWs and produces summaries
         of the scores. Various parameters control the behavior of the
@@ -53,8 +54,8 @@ class BarcodeScorer(object):
 
         self.basH5           = basH5
         self.barcodeFasta    = list(barcodeFasta)
-        self.aligner         = Aligner.SWaligner(useOldWorkflow)
-        self.barcodeLength   = n.unique(map(lambda x : len(x.sequence),
+        self.aligner         = SWaligner(useOldWorkflow)
+        self.barcodeLength   = np.unique(map(lambda x : len(x.sequence),
                                           self.barcodeFasta))
         self.useOldWorkflow  = useOldWorkflow
         self.adapterSidePad  = adapterSidePad
@@ -74,14 +75,14 @@ class BarcodeScorer(object):
 
         # Original barcode sequences and scorers for the Old Workflow
         self.barcodeSeqs = [(barcode.sequence.upper(),
-                             self._rc(barcode.sequence.upper()))
+                             reverseComplement(barcode.sequence.upper()))
                             for barcode in self.barcodeFasta]
         self.forwardScorer = self.aligner.makeScorer([x[0] for x in self.barcodeSeqs])
         self.reverseScorer = self.aligner.makeScorer([x[1] for x in self.barcodeSeqs])
 
         # Forward-oriented barcode sequence pairs for the New Workflow
         self.orientedSeqs  = [bc.sequence.upper() if (i%2)==0 else
-                              self._rc(bc.sequence.upper())
+                              reverseComplement(bc.sequence.upper())
                               for i, bc in enumerate(self.barcodeFasta)]
         self.pairedScorer  = self.aligner.makeScorer( self.orientedSeqs )
 
@@ -93,31 +94,25 @@ class BarcodeScorer(object):
     def movieName(self):
         return self.basH5.movieName
 
-    def makeBCLabel(self, s1, s2):
-        return BARCODE_DELIMITER.join((s1, s2))
-
     @property
     def barcodeLabels(self):
         """The barcode labels are function of the barcodeNames and the
         scoreMode, they represent the user-visible names."""
         if self.scoreMode == 'paired':
-            return n.array([self.makeBCLabel(self.barcodeFasta[i].name,
-                                             self.barcodeFasta[i+1].name) for i
+            return np.array([makeBarcodeLabel(self.barcodeFasta[i].name,
+                                              self.barcodeFasta[i+1].name) for i
                             in xrange(0, len(self.barcodeSeqs), 2)])
         else:
-            return n.array([self.makeBCLabel(x.name, x.name) for x in self.barcodeFasta])
+            return np.array([makeBarcodeLabel(x.name, x.name) for x in self.barcodeFasta])
 
     @property
     def barcodeNames(self):
         """The barcode names are the FASTA names"""
-        return n.array([x.name for x in self.barcodeFasta])
+        return np.array([x.name for x in self.barcodeFasta])
 
     @property
     def scoreMode(self):
         return self._scoreMode
-
-    def _rc(self, s):
-        return "".join([__RC_MAP__[c] for c in s[::-1]])
 
     def _flankingSeqs(self, zmw):
 
@@ -142,7 +137,7 @@ class BarcodeScorer(object):
             try:
                 qSeqLeftRaw = zmw.read(rStart - (self.barcodeLength + self.insertSidePad),
                                       rStart + self.adapterSidePad).basecalls()
-                qSeqLeft = self._rc( qSeqLeftRaw )
+                qSeqLeft = reverseComplement( qSeqLeftRaw )
             except IndexError:
                 qSeqLeft = None
             try:
@@ -195,7 +190,7 @@ class BarcodeScorer(object):
             """
             adapters, scoredFirst = self._flankingSeqs(zmw)
             adapterScores = [[]]*len(adapters)
-            barcodeScores = n.zeros(len(self.barcodeSeqs))
+            barcodeScores = np.zeros(len(self.barcodeSeqs))
 
             for i,adapter in enumerate(adapters):
                 fscores  = self.forwardScorer(adapter[0])
@@ -214,11 +209,11 @@ class BarcodeScorer(object):
                 if scored == 0:
                     adapterScores[i] = barcodeScores
                 else:
-                    adapterScores[i] = n.maximum((fscores + rrscores)/scored,
+                    adapterScores[i] = np.maximum((fscores + rrscores)/scored,
                                                  (rscores + ffscores)/scored)
 
             barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else n.zeros(len(self.barcodeSeqs))
+                else np.zeros(len(self.barcodeSeqs))
 
             return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
@@ -229,7 +224,7 @@ class BarcodeScorer(object):
             """
             adapters, scoredFirst = self._flankingSeqs(zmw)
             adapterScores = [[]]*len(adapters)
-            barcodeScores = n.zeros(len(self.barcodeSeqs))
+            barcodeScores = np.zeros(len(self.barcodeSeqs))
 
             for i,adapter in enumerate(adapters):
                 fscores = self.pairedScorer(adapter[0])
@@ -249,7 +244,7 @@ class BarcodeScorer(object):
                     adapterScores[i] = (fscores + rscores)/scored
 
             barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else n.zeros(len(self.barcodeSeqs))
+                else np.zeros(len(self.barcodeSeqs))
 
             return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
@@ -260,7 +255,7 @@ class BarcodeScorer(object):
             """
             adapters, scoredFirst = self._flankingSeqs(zmw)
             adapterScores = [[]]*len(adapters)
-            barcodeScores = n.zeros(len(self.barcodeSeqs))
+            barcodeScores = np.zeros(len(self.barcodeSeqs))
 
             for i,adapter in enumerate(adapters):
                 fscores = self.forwardScorer(adapter[0])
@@ -280,7 +275,7 @@ class BarcodeScorer(object):
                     adapterScores[i] = (fscores + rscores)/scored
 
             barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else n.zeros(len(self.barcodeSeqs))
+                else np.zeros(len(self.barcodeSeqs))
 
             return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
@@ -289,7 +284,7 @@ class BarcodeScorer(object):
             Convert a tuple "o" returned by scoreZmw into a LabeledZmw object
                 for a symmetrically barcoded ZMW
             """
-            p = n.argsort(-o[2])
+            p = np.argsort(-o[2])
             return LabeledZmw(o[0], o[1], p[0], o[2][p[0]], p[1], o[2][p[1]], o[3])
 
         def choosePaired(o):
@@ -298,16 +293,16 @@ class BarcodeScorer(object):
                 for an asymmetrically barcoded ZMW
             """
             if o[1] == 1:
-                s = n.array([max(o[2][i], o[2][i + 1]) for i in \
+                s = np.array([max(o[2][i], o[2][i + 1]) for i in \
                                  xrange(0, len(self.barcodeSeqs), 2)])
-                p = n.argsort(-s)
+                p = np.argsort(-s)
                 s = s[p]
             else:
                 # score the pairs by scoring the two alternate
                 # ways they could have been put on the molecule. A
                 # missed adapter will confuse this computation.
                 scores  = o[3]
-                results = n.zeros(len(self.barcodeSeqs)/2)
+                results = np.zeros(len(self.barcodeSeqs)/2)
                 for i in xrange(0, len(self.barcodeSeqs), 2):
                     pths = [0,0]
                     for j in xrange(0, len(scores)):
@@ -315,7 +310,7 @@ class BarcodeScorer(object):
                         pths[1 - j % 2] += scores[j][i + 1]
                     results[i/2] = max(pths)
 
-                p = n.argsort(-results)
+                p = np.argsort(-results)
                 s = results[p]
 
             return LabeledZmw(o[0], o[1], p[0], s[0], p[1], s[1], o[3])
