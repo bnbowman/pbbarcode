@@ -73,14 +73,14 @@ def makeFromRangeFunc(barcodeLength, insertSidePad, adapterSidePad, useOldWorkfl
     # Return the selected fromRange function
     return fromRangeFunc
 
-def makeScoreAdaptersFunc(forwardScorer, reverseScorer, pairedScorer,
+def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
                           scoreMode, numSeqs, oldWorkflow):
     """Once the flanking regions around an adapter have been extracted
     they need to be scored against the appropriate set of barcode sequences,
     the specifics of which vary by scoreMode and workflow.
     """
 
-    def scoreAdaptersOld(holeNum, adapters, scoredFirst):
+    def scoreFlankingOld(holeNum, adapters, scoredFirst):
         adapterScores = [[]]*len(adapters)
         barcodeScores = np.zeros(numSeqs)
         for i, adapter in enumerate(adapters):
@@ -102,11 +102,11 @@ def makeScoreAdaptersFunc(forwardScorer, reverseScorer, pairedScorer,
                 adapterScores[i] = barcodeScores
 
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-            else np.zeros(numSeqs)
+            else barcodeScores
 
         return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
-    def scoreAdaptersPaired(holeNum, adapters, scoredFirst):
+    def scoreFlankingPaired(holeNum, adapters, scoredFirst):
         adapterScores = [[]]*len(adapters)
         barcodeScores = np.zeros(numSeqs)
         for i, adapter in enumerate(adapters):
@@ -124,11 +124,11 @@ def makeScoreAdaptersFunc(forwardScorer, reverseScorer, pairedScorer,
                 adapterScores[i] = barcodeScores
 
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-            else np.zeros(numSeqs)
+            else barcodeScores
 
         return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
-    def scoreAdaptersSymmetric(holeNum, adapters, scoredFirst):
+    def scoreFlankingSymmetric(holeNum, adapters, scoredFirst):
         adapterScores = [[]]*len(adapters)
         barcodeScores = np.zeros(numSeqs)
         for i, adapter in enumerate(adapters):
@@ -146,17 +146,17 @@ def makeScoreAdaptersFunc(forwardScorer, reverseScorer, pairedScorer,
                 adapterScores[i] = barcodeScores
 
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-            else np.zeros(numSeqs)
+            else barcodeScores
 
         return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
     # Return the selected scoreAdapters function
     if oldWorkflow:
-        return scoreAdaptersOld
+        return scoreFlankingOld
     elif scoreMode == 'paired' and not oldWorkflow:
-        return scoreAdaptersPaired
+        return scoreFlankingPaired
     elif scoreMode == 'symmetric' and not oldWorkflow:
-        return scoreAdaptersSymmetric
+        return scoreFlankingSymmetric
 
 class BarcodeScorer(object):
     """A BarcodeScorer object scores ZMWs and produces summaries
@@ -225,13 +225,13 @@ class BarcodeScorer(object):
                                            self.adapterSidePad,
                                            self.useOldWorkflow)
 
-        # Make a "scoreAdapters" function for scoring flanking regions
-        self.scoreAdapters = makeScoreAdaptersFunc(forwardScorer,
-                                                   reverseScorer,
-                                                   pairedScorer,
-                                                   self.scoreMode,
-                                                   self.numSeqs,
-                                                   self.useOldWorkflow)
+        # Make a "scoreFlankingRegions" function for the results of "fromRange"
+        self.scoreFlankingRegions = makeScoreFlankingFunc(forwardScorer,
+                                                          reverseScorer,
+                                                          pairedScorer,
+                                                          self.scoreMode,
+                                                          self.numSeqs,
+                                                          self.useOldWorkflow)
 
         # If initialization made it this far, log the settings used
         logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
@@ -276,8 +276,8 @@ class BarcodeScorer(object):
         return (seqs, scoredFirst)
 
     def scoreZmw(self, zmw):
-        adapters, scoredFirst = self._flankingSeqs(zmw)
-        return self.scoreAdapters(zmw.holeNumber, adapters, scoredFirst)
+        flankingRegions, scoredFirst = self._flankingSeqs(zmw)
+        return self.scoreFlankingRegions(zmw.holeNumber, flankingRegions, scoredFirst)
 
     def labelZmws(self, holeNumbers):
         """Return a list of LabeledZmws for input holeNumbers"""
