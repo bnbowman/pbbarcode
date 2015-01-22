@@ -73,6 +73,90 @@ def makeFromRangeFunc(barcodeLength, insertSidePad, adapterSidePad, useOldWorkfl
     # Return the selected fromRange function
     return fromRangeFunc
 
+def makeScoreAdaptersFunc(forwardScorer, reverseScorer, pairedScorer,
+                          scoreMode, numSeqs, oldWorkflow):
+    """Once the flanking regions around an adapter have been extracted
+    they need to be scored against the appropriate set of barcode sequences,
+    the specifics of which vary by scoreMode and workflow.
+    """
+
+    def scoreAdaptersOld(holeNum, adapters, scoredFirst):
+        adapterScores = [[]]*len(adapters)
+        barcodeScores = np.zeros(numSeqs)
+        for i, adapter in enumerate(adapters):
+            fscores  = forwardScorer(adapter[0])
+            rscores  = reverseScorer(adapter[0])
+            ffscores = forwardScorer(adapter[1])
+            rrscores = reverseScorer(adapter[1])
+
+            # Average the two flanking scores for the adapter score
+            if adapter[0] and adapter[1]:
+                adapterScores[i] = np.maximum((fscores + rrscores)/2.0,
+                                             (rscores + ffscores)/2.0)
+            # Single flanking scores are taken as-is
+            elif adapter[0] or adapter[1]:
+                adapterScores[i] = np.maximum((fscores + rrscores)/1.0,
+                                             (rscores + ffscores)/1.0)
+            # Otherwise return the empty
+            else:
+                adapterScores[i] = barcodeScores
+
+        barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
+            else np.zeros(numSeqs)
+
+        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+
+    def scoreAdaptersPaired(holeNum, adapters, scoredFirst):
+        adapterScores = [[]]*len(adapters)
+        barcodeScores = np.zeros(numSeqs)
+        for i, adapter in enumerate(adapters):
+            fscores = pairedScorer(adapter[0])
+            rscores = pairedScorer(adapter[1])
+
+            # Average the two flanking scores for the adapter score
+            if adapter[0] and adapter[1]:
+                adapterScores[i] = (fscores + rscores)/2.0
+            # Single flanking scores are taken as-is
+            elif adapter[0] or adapter[1]:
+                adapterScores[i] = (fscores + rscores)/1.0
+            # Otherwise return the empty
+            else:
+                adapterScores[i] = barcodeScores
+
+        barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
+            else np.zeros(numSeqs)
+
+        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+
+    def scoreAdaptersSymmetric(holeNum, adapters, scoredFirst):
+        adapterScores = [[]]*len(adapters)
+        barcodeScores = np.zeros(numSeqs)
+        for i, adapter in enumerate(adapters):
+            fscores = forwardScorer(adapter[0])
+            rscores = forwardScorer(adapter[1])
+
+            # Average the two flanking scores for the adapter score
+            if adapter[0] and adapter[1]:
+                adapterScores[i] = (fscores + rscores)/2.0
+            # Single flanking scores are taken as-is
+            elif adapter[0] or adapter[1]:
+                adapterScores[i] = (fscores + rscores)/1.0
+            # Otherwise return the empty
+            else:
+                adapterScores[i] = barcodeScores
+
+        barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
+            else np.zeros(numSeqs)
+
+        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+
+    # Return the selected scoreAdapters function
+    if oldWorkflow:
+        return scoreAdaptersOld
+    elif scoreMode == 'paired' and not oldWorkflow:
+        return scoreAdaptersPaired
+    elif scoreMode == 'symmetric' and not oldWorkflow:
+        return scoreAdaptersSymmetric
 
 class BarcodeScorer(object):
     """A BarcodeScorer object scores ZMWs and produces summaries
@@ -92,6 +176,7 @@ class BarcodeScorer(object):
 
         self.basH5           = basH5
         self.barcodeFasta    = list(barcodeFasta)
+        self.numSeqs         = len(self.barcodeFasta)
         self.barcodeNames    = np.array([x.name for x in self.barcodeFasta])
         self.aligner         = SWaligner(useOldWorkflow)
         self.barcodeLength   = np.unique(map(lambda x : len(x.sequence),
@@ -116,14 +201,14 @@ class BarcodeScorer(object):
         self.barcodeSeqs = [(barcode.sequence.upper(),
                              reverseComplement(barcode.sequence.upper()))
                             for barcode in self.barcodeFasta]
-        self.forwardScorer = self.aligner.makeScorer([x[0] for x in self.barcodeSeqs])
-        self.reverseScorer = self.aligner.makeScorer([x[1] for x in self.barcodeSeqs])
+        forwardScorer = self.aligner.makeScorer([x[0] for x in self.barcodeSeqs])
+        reverseScorer = self.aligner.makeScorer([x[1] for x in self.barcodeSeqs])
 
         # Forward-oriented barcode sequence pairs for the New Workflow
-        self.orientedSeqs  = [bc.sequence.upper() if (i%2)==0 else
+        self.orientedSeqs  = [bc.sequence.upper() if (i%2) == 0 else
                               reverseComplement(bc.sequence.upper())
                               for i, bc in enumerate(self.barcodeFasta)]
-        self.pairedScorer  = self.aligner.makeScorer( self.orientedSeqs )
+        pairedScorer  = self.aligner.makeScorer( self.orientedSeqs )
 
         # Given the scoreMode, create all of the possible barcode labels
         if self.scoreMode == 'paired':
@@ -140,6 +225,14 @@ class BarcodeScorer(object):
                                            self.adapterSidePad,
                                            self.useOldWorkflow)
 
+        # Make a "scoreAdapters" function for scoring flanking regions
+        self.scoreAdapters = makeScoreAdaptersFunc(forwardScorer,
+                                                   reverseScorer,
+                                                   pairedScorer,
+                                                   self.scoreMode,
+                                                   self.numSeqs,
+                                                   self.useOldWorkflow)
+
         # If initialization made it this far, log the settings used
         logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
                 "adapterSidePad: %d, insertSidePad: %d, scoreFirst: %r, and oldWorkflow: %s") \
@@ -154,10 +247,12 @@ class BarcodeScorer(object):
         ZMW.  If that number is 0 and scoreFirst is true, try to extract a barcode
         from the 5' tip of the read instead.
         """
+        # Extract the first X adapters
         adapterRegions = zmw.adapterRegions
         if len(adapterRegions) > self.maxHits:
             adapterRegions = adapterRegions[0:self.maxHits]
 
+        # Extract the (left, right) sequence pairs around each adapter
         seqs = [self.fromRange(zmw, start, end) for (start, end) in adapterRegions]
 
         # We only score the first barcode if we don't find any adapters
@@ -180,103 +275,12 @@ class BarcodeScorer(object):
 
         return (seqs, scoredFirst)
 
+    def scoreZmw(self, zmw):
+        adapters, scoredFirst = self._flankingSeqs(zmw)
+        return self.scoreAdapters(zmw.holeNumber, adapters, scoredFirst)
+
     def labelZmws(self, holeNumbers):
         """Return a list of LabeledZmws for input holeNumbers"""
-
-        def scoreZmwOld(zmw):
-            """
-            The old scoreZmw function tries all orientations of all sequences
-            """
-            adapters, scoredFirst = self._flankingSeqs(zmw)
-            adapterScores = [[]]*len(adapters)
-            barcodeScores = np.zeros(len(self.barcodeSeqs))
-
-            for i,adapter in enumerate(adapters):
-                fscores  = self.forwardScorer(adapter[0])
-                rscores  = self.reverseScorer(adapter[0])
-                ffscores = self.forwardScorer(adapter[1])
-                rrscores = self.reverseScorer(adapter[1])
-
-                scored = 2.0 if adapter[0] and adapter[1] \
-                    else 1.0 if adapter[0] or  adapter[1] \
-                    else 0
-
-                # An adapter score is the average barcode score for
-                # each barcode -- that way, you can compare across
-                # adapters even if the different adapters have
-                # different numbers of flanking sequence.
-                if scored == 0:
-                    adapterScores[i] = barcodeScores
-                else:
-                    adapterScores[i] = np.maximum((fscores + rrscores)/scored,
-                                                 (rscores + ffscores)/scored)
-
-            barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else np.zeros(len(self.barcodeSeqs))
-
-            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
-
-        def scoreZmwNewPaired(zmw):
-            """
-            The new scoreZmw function for paired barcodes uses only the forward orientation
-                of the forward barcodes and the RC of the reverse barcodes
-            """
-            adapters, scoredFirst = self._flankingSeqs(zmw)
-            adapterScores = [[]]*len(adapters)
-            barcodeScores = np.zeros(len(self.barcodeSeqs))
-
-            for i,adapter in enumerate(adapters):
-                fscores = self.pairedScorer(adapter[0])
-                rscores = self.pairedScorer(adapter[1])
-
-                scored = 2.0 if adapter[0] and adapter[1] \
-                    else 1.0 if adapter[0] or  adapter[1] \
-                    else 0
-
-                # An adapter score is the average barcode score for
-                # each barcode -- that way, you can compare across
-                # adapters even if the different adapters have
-                # different numbers of flanking sequence.
-                if scored == 0:
-                    adapterScores[i] = barcodeScores
-                else:
-                    adapterScores[i] = (fscores + rscores)/scored
-
-            barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else np.zeros(len(self.barcodeSeqs))
-
-            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
-
-        def scoreZmwNewSymmetric(zmw):
-            """
-            The new scoreZmw function for symmetric barcodes uses only the forward orientation
-                of the supplied barcodes
-            """
-            adapters, scoredFirst = self._flankingSeqs(zmw)
-            adapterScores = [[]]*len(adapters)
-            barcodeScores = np.zeros(len(self.barcodeSeqs))
-
-            for i,adapter in enumerate(adapters):
-                fscores = self.forwardScorer(adapter[0])
-                rscores = self.forwardScorer(adapter[1])
-
-                scored = 2.0 if adapter[0] and adapter[1] \
-                    else 1.0 if adapter[0] or  adapter[1] \
-                    else 0
-
-                # An adapter score is the average barcode score for
-                # each barcode -- that way, you can compare across
-                # adapters even if the different adapters have
-                # different numbers of flanking sequence.
-                if scored == 0:
-                    adapterScores[i] = barcodeScores
-                else:
-                    adapterScores[i] = (fscores + rscores)/scored
-
-            barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
-                else np.zeros(len(self.barcodeSeqs))
-
-            return (zmw.holeNumber, len(adapters), barcodeScores, adapterScores, scoredFirst)
 
         def chooseSymmetric(o):
             """
@@ -314,17 +318,6 @@ class BarcodeScorer(object):
 
             return LabeledZmw(o[0], o[1], p[0], s[0], p[1], s[1], o[3])
 
-        # Select the "scoreZmw" method to be used to generate raw barcode
-        #    scores
-        if self.useOldWorkflow:
-            scoreZmw = scoreZmwOld
-        elif self.scoreMode == 'symmetric':
-            scoreZmw = scoreZmwNewSymmetric
-        elif self.scoreMode == 'paired':
-            scoreZmw = scoreZmwNewPaired
-        else:
-            raise Exception("Unsupported scoring mode in BarcodeLabeler.py")
-
         # Select the "choose" method to be used formatting raw barcode scores
         #    into LabeledZmw Objects
         if self.scoreMode == 'symmetric':
@@ -334,5 +327,6 @@ class BarcodeScorer(object):
         else:
             raise Exception("Unsupported scoring mode in BarcodeLabeler.py")
 
-        scored = [scoreZmw(self.basH5[zmw]) for zmw in holeNumbers]
+        scored = [self.scoreZmw(self.basH5[zmw]) for zmw in holeNumbers]
+
         return [choose(scoreTup) for scoreTup in scored if scoreTup[1]]
