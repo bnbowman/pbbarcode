@@ -95,8 +95,8 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
                                              (rscores + ffscores)/2.0)
             # Single flanking scores are taken as-is
             elif adapter[0] or adapter[1]:
-                adapterScores[i] = np.maximum((fscores + rrscores)/1.0,
-                                             (rscores + ffscores)/1.0)
+                adapterScores[i] = np.maximum((fscores + rrscores),
+                                             (rscores + ffscores))
             # Otherwise return the empty
             else:
                 adapterScores[i] = barcodeScores
@@ -104,7 +104,9 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
             else barcodeScores
 
-        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+        return Bunch(holeNum=holeNum, numAdapters=len(adapters),
+                     barcodeScores=barcodeScores, adapterScores=adapterScores,
+                     scoredFirst=scoredFirst)
 
     def scoreFlankingPaired(holeNum, adapters, scoredFirst):
         adapterScores = [[]]*len(adapters)
@@ -118,7 +120,7 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
                 adapterScores[i] = (fscores + rscores)/2.0
             # Single flanking scores are taken as-is
             elif adapter[0] or adapter[1]:
-                adapterScores[i] = (fscores + rscores)/1.0
+                adapterScores[i] = (fscores + rscores)
             # Otherwise return the empty
             else:
                 adapterScores[i] = barcodeScores
@@ -126,7 +128,9 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
             else barcodeScores
 
-        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+        return Bunch(holeNum=holeNum, numAdapters=len(adapters),
+                     barcodeScores=barcodeScores, adapterScores=adapterScores,
+                     scoredFirst=scoredFirst)
 
     def scoreFlankingSymmetric(holeNum, adapters, scoredFirst):
         adapterScores = [[]]*len(adapters)
@@ -140,7 +144,7 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
                 adapterScores[i] = (fscores + rscores)/2.0
             # Single flanking scores are taken as-is
             elif adapter[0] or adapter[1]:
-                adapterScores[i] = (fscores + rscores)/1.0
+                adapterScores[i] = (fscores + rscores)
             # Otherwise return the empty
             else:
                 adapterScores[i] = barcodeScores
@@ -148,15 +152,73 @@ def makeScoreFlankingFunc(forwardScorer, reverseScorer, pairedScorer,
         barcodeScores = reduce(lambda x, y: x + y, adapterScores) if adapterScores \
             else barcodeScores
 
-        return (holeNum, len(adapters), barcodeScores, adapterScores, scoredFirst)
+        return Bunch(holeNum=holeNum, numAdapters=len(adapters),
+                     barcodeScores=barcodeScores, adapterScores=adapterScores,
+                     scoredFirst=scoredFirst)
 
-    # Return the selected scoreAdapters function
+    # Return the workflow/scoreMode appropriate scoring function
     if oldWorkflow:
         return scoreFlankingOld
     elif scoreMode == 'paired' and not oldWorkflow:
         return scoreFlankingPaired
     elif scoreMode == 'symmetric' and not oldWorkflow:
         return scoreFlankingSymmetric
+
+# The following two functs create labeledZmws from a scoreBunch object
+def makeSymmetricZmw(scoreBunch):
+    """Convert a dictionary-like object with barcode scoring information
+    into a LabeledZmw for a symmetrically barcoded read"""
+    rankedBarcodes = np.argsort(-1 * scoreBunch.barcodeScores)
+    bestIdx = rankedBarcodes[0]
+    secondBestIdx = rankedBarcodes[1]
+    return LabeledZmw(scoreBunch.holeNum,
+                      scoreBunch.numAdapters,
+                      bestIdx,
+                      scoreBunch.barcodeScores[bestIdx],
+                      secondBestIdx,
+                      scoreBunch.barcodeScores[secondBestIdx],
+                      scoreBunch.adapterScores)
+
+def makePairedZmw(scoreBunch):
+    """Convert a dictionary-like object with barcode scoring information
+    into a LabeledZmw for a symmetrically barcoded read"""
+    numSeqs = len(scoreBunch.barcodeScores)
+    if scoreBunch.numAdapters == 1:
+        # If we have one adapter, pick the best barcode from each pair as the
+        #    score for that pair
+        rawPairScores = [max(scoreBunch.barcodeScores[i], scoreBunch.barcodeScores[i+1]) \
+                         for i in xrange(0, numSeqs, 2)]
+        pairScores = np.array(rawPairScores)
+        barcodeRanks = np.argsort(-pairScores)
+        pairScores = pairScores[barcodeRanks]
+    else:
+        # If we have more than one adapter, score the two possible orderings we
+        #    expec (F--R--F... or R--F--R...) then take the best score from
+        #    those two possibilities as the score for that pair.
+        # NOTE: A missed adapter will confuse this computation.
+        scores  = scoreBunch.adapterScores
+        results = np.zeros(numSeqs/2)
+        for i in xrange(0, numSeqs, 2):
+            orientations = [0,0]
+            for j in xrange(0, len(scores)):
+                orientations[j % 2] += scores[j][i]
+                orientations[1 - j % 2] += scores[j][i + 1]
+            results[i/2] = max(orientations)
+        barcodeRanks = np.argsort(-results)
+        pairScores = results[barcodeRanks]
+
+    bestIdx = barcodeRanks[0]
+    bestScore = pairScores[0]
+    secondBestIdx = barcodeRanks[1]
+    secondBestScore = pairScores[1]
+    return LabeledZmw(scoreBunch.holeNum,
+                      scoreBunch.numAdapters,
+                      bestIdx,
+                      bestScore,
+                      secondBestIdx,
+                      secondBestScore,
+                      scoreBunch.adapterScores)
+
 
 class BarcodeScorer(object):
     """A BarcodeScorer object scores ZMWs and produces summaries
@@ -179,8 +241,6 @@ class BarcodeScorer(object):
         self.numSeqs         = len(self.barcodeFasta)
         self.barcodeNames    = np.array([x.name for x in self.barcodeFasta])
         self.aligner         = SWaligner(useOldWorkflow)
-        self.barcodeLength   = np.unique(map(lambda x : len(x.sequence),
-                                          self.barcodeFasta))
         self.useOldWorkflow  = useOldWorkflow
         self.adapterSidePad  = adapterSidePad
         self.insertSidePad   = insertSidePad
@@ -192,10 +252,12 @@ class BarcodeScorer(object):
             raise Exception("scoreMode must either be symmetric or paired")
         self.scoreMode = scoreMode
 
-        if len(self.barcodeLength) > 1:
+        barcodeLengths = np.unique(map(lambda x : len(x.sequence),
+                                       self.barcodeFasta))
+        if len(barcodeLengths) > 1:
             raise Exception("Currently, all barcodes must be the same length.")
         else:
-            self.barcodeLength = int(self.barcodeLength)
+            self.barcodeLength = int(barcodeLengths)
 
         # Original barcode sequences and scorers for the Old Workflow
         self.barcodeSeqs = [(barcode.sequence.upper(),
@@ -232,6 +294,13 @@ class BarcodeScorer(object):
                                                           self.scoreMode,
                                                           self.numSeqs,
                                                           self.useOldWorkflow)
+
+        # Select the score-mode appropriate function for formatting scoring
+        #    results into LabeledZmw objects
+        if self.scoreMode == 'paired':
+            self.makeLabeledZmw = makePairedZmw
+        else:
+            self.makeLabeledZmw = makeSymmetricZmw
 
         # If initialization made it this far, log the settings used
         logging.debug(("Constructed BarcodeScorer with scoreMode: %s," + \
@@ -281,52 +350,5 @@ class BarcodeScorer(object):
 
     def labelZmws(self, holeNumbers):
         """Return a list of LabeledZmws for input holeNumbers"""
-
-        def chooseSymmetric(o):
-            """
-            Convert a tuple "o" returned by scoreZmw into a LabeledZmw object
-                for a symmetrically barcoded ZMW
-            """
-            p = np.argsort(-o[2])
-            return LabeledZmw(o[0], o[1], p[0], o[2][p[0]], p[1], o[2][p[1]], o[3])
-
-        def choosePaired(o):
-            """
-            Convert a tuple "o" returned by scoreZmw into a LabeledZmw object
-                for an asymmetrically barcoded ZMW
-            """
-            if o[1] == 1:
-                s = np.array([max(o[2][i], o[2][i + 1]) for i in \
-                                 xrange(0, len(self.barcodeSeqs), 2)])
-                p = np.argsort(-s)
-                s = s[p]
-            else:
-                # score the pairs by scoring the two alternate
-                # ways they could have been put on the molecule. A
-                # missed adapter will confuse this computation.
-                scores  = o[3]
-                results = np.zeros(len(self.barcodeSeqs)/2)
-                for i in xrange(0, len(self.barcodeSeqs), 2):
-                    pths = [0,0]
-                    for j in xrange(0, len(scores)):
-                        pths[j % 2] += scores[j][i]
-                        pths[1 - j % 2] += scores[j][i + 1]
-                    results[i/2] = max(pths)
-
-                p = np.argsort(-results)
-                s = results[p]
-
-            return LabeledZmw(o[0], o[1], p[0], s[0], p[1], s[1], o[3])
-
-        # Select the "choose" method to be used formatting raw barcode scores
-        #    into LabeledZmw Objects
-        if self.scoreMode == 'symmetric':
-            choose = chooseSymmetric
-        elif self.scoreMode == 'paired':
-            choose = choosePaired
-        else:
-            raise Exception("Unsupported scoring mode in BarcodeLabeler.py")
-
         scored = [self.scoreZmw(self.basH5[zmw]) for zmw in holeNumbers]
-
-        return [choose(scoreTup) for scoreTup in scored if scoreTup[1]]
+        return [self.makeLabeledZmw(scoreBunch) for scoreBunch in scored if scoreBunch.numAdapters]
